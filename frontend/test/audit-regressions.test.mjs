@@ -733,6 +733,13 @@ test('AUD-39 authoritative empty client list removes the last deleted client', a
 });
 
 test('AUD-38 Windows command data retains literal PowerShell argument values', () => {
+  if (process.platform !== 'win32') {
+    const probe = spawnSync('which', ['pwsh'], { encoding: 'utf8', timeout: 5000 });
+    if (probe.error || probe.status !== 0) {
+      console.log('AUD-38 skipped: pwsh not available on this platform');
+      return;
+    }
+  }
   const { buildAgentInstallCommand, defaultAgentInstallOptions } = productionModule('src/utils/agentInstallCommand.ts');
   const evaluateOutputOnly = (probe) => {
     const guard = `$probe=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${Buffer.from(probe, 'utf16le').toString('base64')}')); $tokens=$null; $errors=$null; $ast=[Management.Automation.Language.Parser]::ParseInput($probe,[ref]$tokens,[ref]$errors); if($errors.Count) { throw 'Probe parse error' }; $commands=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.CommandAst]},$true)); foreach($command in $commands) { if($command.GetCommandName() -ne 'Write-Output') { throw 'Unexpected command boundary' } }; if($ast.Find({param($n) $n -is [Management.Automation.Language.InvokeMemberExpressionAst]},$true)) { throw 'Unexpected member invocation' }; & ([scriptblock]::Create($probe))`;

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import ts from '../../node_modules/typescript/lib/typescript.js';
+import ts from '../../../node_modules/typescript/lib/typescript.js';
 
 const frontendRoot = new URL('../../', import.meta.url);
 const require = createRequire(new URL('package.json', frontendRoot));
