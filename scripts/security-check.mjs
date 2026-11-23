@@ -47,14 +47,27 @@ export function runSecurityChecks({ run = spawnSync, log = console.log } = {}) {
   });
   requireSuccessfulScan('govulncheck install', goInstall);
   // Resolve the installed binary path so we don't depend on PATH propagation.
+  // go install uses $GOBIN if set, otherwise $GOPATH/bin.
   const goBinDir = run('go', ['env', 'GOBIN'], {
     cwd: join(root, 'agent'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 10000, maxBuffer: 1024,
   });
   const goBin = goBinDir.status === 0 && goBinDir.stdout?.trim()
     ? goBinDir.stdout.trim()
-    : join(root, 'agent', 'bin');
-  const goVulncheck = join(goBin, 'govulncheck');
+    : null;
+  let goVulncheck;
+  if (goBin) {
+    goVulncheck = join(goBin, 'govulncheck');
+  } else {
+    const goPathDir = run('go', ['env', 'GOPATH'], {
+      cwd: join(root, 'agent'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10000, maxBuffer: 1024,
+    });
+    const goPath = goPathDir.status === 0 && goPathDir.stdout?.trim()
+      ? goPathDir.stdout.trim()
+      : join(root, 'agent');
+    goVulncheck = join(goPath, 'bin', 'govulncheck');
+  }
   const go = run(goVulncheck, ['./...'], {
     cwd: join(root, 'agent'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 300000, maxBuffer: 16 * 1024 * 1024,
