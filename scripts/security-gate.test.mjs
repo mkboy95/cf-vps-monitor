@@ -7,18 +7,20 @@ const packageJson = JSON.parse(await readFile(new URL('package.json', root), 'ut
 const cleanNpm = { status: 0, stdout: JSON.stringify({ auditReportVersion: 2, vulnerabilities: {},
   metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } } }), stderr: '' };
 const cleanGo = { status: 0, stdout: 'No vulnerabilities found.\n', stderr: '' };
+const cleanGoBin = { status: 0, stdout: '/tmp/go-bin\n', stderr: '' };
 const vulnerableNpm = { status: 1, stdout: JSON.stringify({ auditReportVersion: 2,
   vulnerabilities: { hono: { severity: 'high', via: ['GHSA-synthetic'] } },
   metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 1, critical: 0, total: 1 } } }), stderr: '' };
 
 // Traverse the actual checked-in verification entrypoints. Builds and behavior
 // tests pass in this fixture so only the scanner boundary can block publication.
-async function fixture({ npm = cleanNpm, go = cleanGo, commands = ['npm run verify'] } = {}) {
+async function fixture({ npm = cleanNpm, go = cleanGo, goBin = cleanGoBin, commands = ['npm run verify'] } = {}) {
   const calls = [];
   const run = (command, args, options) => {
     calls.push({ command, args, options });
     if (args.includes('audit')) return typeof npm === 'function' ? npm(args) : npm;
-    if (args.some(arg => arg.includes('govulncheck'))) return go;
+    if (args.includes('env') && args.includes('GOBIN')) return goBin;
+    if (args.some(arg => arg.includes('govulncheck')) || (typeof command === 'string' && command.includes('govulncheck'))) return go;
     throw new Error(`Unexpected security subprocess: ${command} ${args.join(' ')}`);
   };
   async function execute(command) {
@@ -111,11 +113,14 @@ test('AUD-20 scanner failures and incomplete output fail closed', async () => {
 test('AUD-20 clean scans allow verification only after both npm and the actual Agent toolchain are scanned', async () => {
   const result = await fixture();
   assert.equal(result.status, 0, result.error?.stack);
-  assert.equal(result.calls.length, 2, 'both scanners are mandatory');
-  const go = result.calls.find(call => call.args.some(arg => arg.includes('govulncheck')));
+  assert.equal(result.calls.length, 4, 'npm audit, go install, go env GOBIN, and govulncheck are mandatory');
+  const goInstall = result.calls.find(call => call.args.includes('install'));
+  assert.ok(goInstall, 'govulncheck is installed before execution');
+  assert.ok(goInstall.args.includes('golang.org/x/vuln/cmd/govulncheck@v1.7.0'));
+  const go = result.calls.find(call => typeof call.command === 'string' && call.command.includes('govulncheck'));
+  assert.ok(go, 'govulncheck binary is executed');
   assert.ok(go.options.cwd.replaceAll('\\', '/').endsWith('/agent'));
   assert.equal(go.args.includes('-json'), false, 'default text mode preserves govulncheck finding exit semantics');
-  assert.ok(go.args.includes('golang.org/x/vuln/cmd/govulncheck@v1.7.0'));
 });
 
 test('AUD-20 the reusable CI gate blocks same-checkout Agent publishing when security fails', async () => {
@@ -131,5 +136,5 @@ test('AUD-20 the reusable CI gate blocks same-checkout Agent publishing when sec
   assert.equal(canPublish, false, 'the same-checkout reusable CI must fail before release-agent can publish');
   const success = await fixture({ commands });
   assert.equal(success.status, 0, success.error?.stack);
-  assert.equal(success.calls.length, 2);
+  assert.equal(success.calls.length, 4);
 });

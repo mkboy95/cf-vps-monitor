@@ -89,6 +89,8 @@ jobs:
 
       - name: Dependency and toolchain security
         run: npm run security:check
+        env:
+          GOTOOLCHAIN: auto
 
       - name: Check migration drift
         run: |

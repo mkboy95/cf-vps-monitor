@@ -39,7 +39,23 @@ export function runSecurityChecks({ run = spawnSync, log = console.log } = {}) {
 
   // Keep the pinned scanner in default text mode. Its JSON mode can exit zero
   // with findings, so JSON/progress/partial output is not accepted as success.
-  const go = run('go', ['run', 'golang.org/x/vuln/cmd/govulncheck@v1.7.0', './...'], {
+  // Use go install + binary execution: go run pkg@version fails under
+  // GOTOOLCHAIN=local in CI (exit status 3 during module resolution).
+  const goInstall = run('go', ['install', 'golang.org/x/vuln/cmd/govulncheck@v1.7.0'], {
+    cwd: join(root, 'agent'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 300000, maxBuffer: 16 * 1024 * 1024,
+  });
+  requireSuccessfulScan('govulncheck install', goInstall);
+  // Resolve the installed binary path so we don't depend on PATH propagation.
+  const goBinDir = run('go', ['env', 'GOBIN'], {
+    cwd: join(root, 'agent'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 10000, maxBuffer: 1024,
+  });
+  const goBin = goBinDir.status === 0 && goBinDir.stdout?.trim()
+    ? goBinDir.stdout.trim()
+    : join(root, 'agent', 'bin');
+  const goVulncheck = join(goBin, 'govulncheck');
+  const go = run(goVulncheck, ['./...'], {
     cwd: join(root, 'agent'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 300000, maxBuffer: 16 * 1024 * 1024,
   });
