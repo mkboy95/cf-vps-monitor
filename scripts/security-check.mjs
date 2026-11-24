@@ -12,6 +12,21 @@ function requireSuccessfulScan(name, result) {
   }
 }
 
+// govulncheck's text layout changed across versions: newer builds keep the
+// "No vulnerabilities found." symbol result but append a summary paragraph
+// ("Your code is affected by 0 vulnerabilities." plus imported-but-uncalled
+// counts). Validate the semantics of a clean scan instead of an exact whole
+// string, while still failing closed on findings, JSON mode, or partial output.
+function isCleanGoTextScan(stdout) {
+  const text = String(stdout ?? '').trim();
+  if (!text || /^[{[]/.test(text)) return false; // empty or JSON/progress output
+  if (/Vulnerability\s+#\d+\s*:/i.test(text)) return false; // a concrete finding
+  if (!/\bNo vulnerabilities found\.\s*$/m.test(text)) return false; // clean confirmation must be a whole line
+  const affected = /\bYour code is affected by\s+(\d+)\s+vulnerabilit/i.exec(text);
+  if (affected && Number(affected[1]) !== 0) return false; // summary must report zero
+  return true;
+}
+
 // The runner is the subprocess boundary; the same validation runs locally and in
 // CI. A registry outage or truncated result must never be treated as a clean scan.
 export function runSecurityChecks({ run = spawnSync, log = console.log } = {}) {
@@ -73,8 +88,8 @@ export function runSecurityChecks({ run = spawnSync, log = console.log } = {}) {
     timeout: 300000, maxBuffer: 16 * 1024 * 1024,
   });
   requireSuccessfulScan('govulncheck', go);
-  if (go.stdout.trim() !== 'No vulnerabilities found.') {
-    throw new Error(`govulncheck did not return a complete clean text scan:\n${go.stdout.trim().slice(0, 12000)}`);
+  if (!isCleanGoTextScan(go.stdout)) {
+    throw new Error(`govulncheck did not return a complete clean text scan:\n${String(go.stdout).trim().slice(0, 12000)}`);
   }
   log('govulncheck: no vulnerabilities found.');
   return 0;

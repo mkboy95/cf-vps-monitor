@@ -7,6 +7,12 @@ const packageJson = JSON.parse(await readFile(new URL('package.json', root), 'ut
 const cleanNpm = { status: 0, stdout: JSON.stringify({ auditReportVersion: 2, vulnerabilities: {},
   metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } } }), stderr: '' };
 const cleanGo = { status: 0, stdout: 'No vulnerabilities found.\n', stderr: '' };
+// Newer govulncheck keeps the symbol result but appends a summary paragraph.
+const cleanGoVerbose = { status: 0, stdout: '=== Symbol Results ===\n\nNo vulnerabilities found.\n\n'
+  + 'Your code is affected by 0 vulnerabilities.\n'
+  + 'This scan also found 1 vulnerability in packages you import and 19\n'
+  + "vulnerabilities in modules you require, but your code doesn't appear to call\n"
+  + 'these vulnerabilities.\nUse \'-show verbose\' for more details.\n', stderr: '' };
 const cleanGoBin = { status: 0, stdout: '/tmp/go-bin\n', stderr: '' };
 const vulnerableNpm = { status: 1, stdout: JSON.stringify({ auditReportVersion: 2,
   vulnerabilities: { hono: { severity: 'high', via: ['GHSA-synthetic'] } },
@@ -105,9 +111,18 @@ test('AUD-20 scanner failures and incomplete output fail closed', async () => {
     { status: 0, stdout: '' },
     { status: 0, stdout: '{"config":{"scanner_name":"govulncheck"}}\n' },
     { status: 0, stdout: 'Vulnerability #1: GO-2026-SYNTHETIC\nNo vulnerabilities found.\n' },
+    { status: 0, stdout: 'No vulnerabilities found.\nYour code is affected by 1 vulnerability.\n' },
   ]) {
     assert.equal((await fixture({ go })).status, 1, 'Go must return a complete clean text scan');
   }
+});
+
+test('AUD-20 govulncheck verbose clean summary is accepted without weakening fail-closed checks', async () => {
+  const clean = await fixture({ go: cleanGoVerbose });
+  assert.equal(clean.status, 0, clean.error?.stack);
+  const affected = await fixture({ go: { ...cleanGoVerbose,
+    stdout: cleanGoVerbose.stdout.replace('affected by 0', 'affected by 3') } });
+  assert.equal(affected.status, 1, 'a nonzero affected count must still block verification');
 });
 
 test('AUD-20 clean scans allow verification only after both npm and the actual Agent toolchain are scanned', async () => {
