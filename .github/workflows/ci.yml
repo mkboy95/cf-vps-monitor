@@ -37,9 +37,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download Go modules
+      - name: Resolve Go modules
         working-directory: agent
-        run: go mod download
+        run: go mod tidy
 
       # Both packages type-check here: frontend runs `tsc --noEmit`,
       # worker runs `wrangler types --check && tsc --noEmit`.
