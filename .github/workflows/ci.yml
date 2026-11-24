@@ -37,6 +37,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download Go modules
+        working-directory: agent
+        run: go mod download
+
       # Both packages type-check here: frontend runs `tsc --noEmit`,
       # worker runs `wrangler types --check && tsc --noEmit`.
       - name: Lint

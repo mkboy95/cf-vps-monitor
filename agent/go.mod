@@ -3,7 +3,7 @@ module github.com/cf-vps-monitor/agent
 go 1.26.11
 
 require (
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/shirou/gopsutil/v3 v3.23.2
 	golang.org/x/sys v0.44.0
 )
