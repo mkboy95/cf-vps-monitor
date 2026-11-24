@@ -41,6 +41,12 @@ jobs:
         working-directory: agent
         run: go mod tidy
 
+      # A tidy that changes tracked files means go.mod/go.sum were committed out
+      # of sync. Fail here instead of letting the release job (which builds
+      # directly from the committed go.sum) break later.
+      - name: Verify Go module files are committed
+        run: git diff --exit-code -- agent/go.mod agent/go.sum
+
       # Both packages type-check here: frontend runs `tsc --noEmit`,
       # worker runs `wrangler types --check && tsc --noEmit`.
       - name: Lint
