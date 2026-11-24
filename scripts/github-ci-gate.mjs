@@ -115,11 +115,21 @@ export async function runGithubCiGate({
       return value.toLowerCase();
     };
     const sha = readCommit();
-    if (env.WORKERS_CI_COMMIT_SHA !== undefined
-        && (typeof env.WORKERS_CI_COMMIT_SHA !== 'string'
-          || !commitPattern.test(env.WORKERS_CI_COMMIT_SHA.trim())
-          || env.WORKERS_CI_COMMIT_SHA.trim().toLowerCase() !== sha)) {
-      fail('COMMIT_MISMATCH', 'the Workers build commit differs from Git HEAD.');
+    // Workers Builds injects WORKERS_CI_COMMIT_SHA for the webhook commit that
+    // triggered the build, but a queued/retried build can check out a newer
+    // branch tip when several commits land in quick succession. The checkout
+    // HEAD is what is actually deployed and is the SHA used for the CI lookup
+    // below, so a differing injected SHA is advisory only -- it must not block
+    // an otherwise clean, CI-verified checkout. The core invariant (the checked
+    // out commit passed push CI and the tree is clean) is unchanged.
+    const injected = env.WORKERS_CI_COMMIT_SHA;
+    if (injected !== undefined) {
+      const injectedSha = typeof injected === 'string' && commitPattern.test(injected.trim())
+        ? injected.trim().toLowerCase()
+        : null;
+      if (injectedSha !== sha) {
+        log(`Note: Workers build SHA (${injectedSha ?? 'invalid or empty'}) differs from checkout ${sha.slice(0, 7)}; gating on the checked-out commit.`);
+      }
     }
     const repository = repositoryFromRemote(git(['remote', 'get-url', 'origin']));
     git(['diff', '--quiet', 'HEAD', '--']);

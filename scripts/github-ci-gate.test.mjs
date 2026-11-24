@@ -219,8 +219,6 @@ for (const [label, overrides] of [
 
 for (const [label, settings, code] of [
   ['invalid Git SHA', { head: 'not-a-commit' }, 'INVALID_COMMIT'],
-  ['mismatched environment SHA', { env: { WORKERS_CI_COMMIT_SHA: OTHER_SHA } }, 'COMMIT_MISMATCH'],
-  ['malformed environment SHA', { env: { WORKERS_CI_COMMIT_SHA: 'short' } }, 'COMMIT_MISMATCH'],
   ['tracked or staged changes', { dirty: true }, 'DIRTY_WORKTREE'],
   ['non-GitHub origin', { remote: 'https://example.invalid/example/monitor.git' }, 'INVALID_REMOTE'],
   ['insecure origin', { remote: 'http://github.com/example/monitor.git' }, 'INVALID_REMOTE'],
@@ -238,6 +236,21 @@ test('a matching optional Workers SHA works without requiring a branch variable'
   const result = await fixture({ env: { WORKERS_CI_COMMIT_SHA: SHA } }).execute();
   assert.equal(result.sha, SHA);
 });
+
+for (const [label, injected] of [
+  ['mismatched', OTHER_SHA],
+  ['malformed', 'short'],
+  ['empty', '   '],
+]) {
+  test(`a ${label} Workers build SHA is advisory and still gates on the checked-out commit`, async () => {
+    const f = fixture({ env: { WORKERS_CI_COMMIT_SHA: injected } });
+    const result = await f.execute();
+    assert.equal(result.sha, SHA, 'the checkout HEAD, not the injected SHA, authorizes deployment');
+    assert.equal(f.calls.http.length, 1, 'the checked-out commit CI is still verified');
+    assert.ok(f.calls.logs.some(message => message.includes('Workers build SHA')), 'the mismatch is surfaced');
+    assert.ok(f.calls.logs.some(message => message.includes('CI passed')));
+  });
+}
 
 for (const [label, settings, code] of [
   ['checkout changes', { head: count => count === 1 ? SHA : OTHER_SHA }, 'COMMIT_MISMATCH'],
